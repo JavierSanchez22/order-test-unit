@@ -1,7 +1,22 @@
+export class InvalidOrderStateError extends Error {
+    constructor(message?: string) {
+        super(message);
+        this.name = 'InvalidOrderStateError';
+    }
+}
+
+export class InvalidQuantityError extends Error {
+    constructor(message?: string) {
+        super(message);
+        this.name = 'InvalidQuantityError';
+    }
+}
+
 export enum OrderStatus {
     Draft = 'Draft',
     Pending = 'Pending',
-    Completed = 'Completed'
+    Completed = 'Completed',
+    Cancelled = 'Cancelled'
 }
 
 export class CustomerId {
@@ -21,21 +36,24 @@ export class ProductId {
 }
 
 export class Quantity {
-    private constructor(
-        public readonly amount: number, 
-        public readonly currency: string
-    ) {}
+    private constructor(public readonly value: number) {}
 
-    static create(amount: number, currency: string): Quantity {
-        return new Quantity(amount, currency);
+    static create(value: number): Quantity {
+        if (value <= 0) {
+            throw new InvalidQuantityError();
+        }
+        return new Quantity(value);
     }
 }
 
 export class Money {
-    private constructor(public readonly amount: number) {}
+    private constructor(
+        public readonly amount: number,
+        public readonly currency: string
+    ) {}
 
-    static create(amount: number): Money {
-        return new Money(amount);
+    static create(amount: number, currency: string): Money {
+        return new Money(amount, currency);
     }
 }
 
@@ -52,7 +70,8 @@ export class OrderCreated extends DomainEvent {
 export class OrderItem {
     constructor(
         public readonly productId: ProductId, 
-        public readonly quantity: Quantity
+        public readonly quantity: Quantity,
+        public readonly price: Money
     ) {}
 }
 
@@ -67,7 +86,7 @@ export class Order {
         this.status = OrderStatus.Draft;
         this.customerId = customerId;
         this.items = [];
-        this.total = Money.create(0);
+        this.total = Money.create(0, 'USD');
         this.domainEvents = [];
     }
 
@@ -77,9 +96,32 @@ export class Order {
         return order;
     }
 
-    addItem(productId: ProductId, quantity: Quantity): void {
-        const item = new OrderItem(productId, quantity);
-        this.items.push(item);
+    cancel(): void {
+        this.status = OrderStatus.Cancelled;
+    }
+
+    addItem(productId: ProductId, quantity: Quantity, price: Money): void {
+        if (this.status === OrderStatus.Cancelled) {
+            throw new InvalidOrderStateError();
+        }
+
+        const existingItemIndex = this.items.findIndex(
+            item => item.productId.value === productId.value
+        );
+
+        if (existingItemIndex >= 0) {
+            const existingItem = this.items[existingItemIndex];
+            const newValue = existingItem.quantity.value + quantity.value;
+            
+            this.items[existingItemIndex] = new OrderItem(
+                productId, 
+                Quantity.create(newValue),
+                price
+            );
+        } else {
+            const item = new OrderItem(productId, quantity, price);
+            this.items.push(item);
+        }
     }
 
     private addDomainEvent(event: DomainEvent): void {
