@@ -19,6 +19,18 @@ export enum OrderStatus {
     Cancelled = 'Cancelled'
 }
 
+export class OrderId {
+    private constructor(public readonly value: string) {}
+
+    static from(id: string): OrderId {
+        return new OrderId(id);
+    }
+
+    static generate(): OrderId {
+        return new OrderId(Math.random().toString(36).substring(2, 15));
+    }
+}
+
 export class CustomerId {
     private constructor(public readonly value: string) {}
 
@@ -76,13 +88,15 @@ export class OrderItem {
 }
 
 export class Order {
+    public id: OrderId;
     public status: OrderStatus;
     public customerId: CustomerId;
     public items: OrderItem[];
     public total: Money;
     public domainEvents: DomainEvent[];
 
-    private constructor(customerId: CustomerId) {
+    private constructor(id: OrderId, customerId: CustomerId) {
+        this.id = id;
         this.status = OrderStatus.Draft;
         this.customerId = customerId;
         this.items = [];
@@ -91,7 +105,8 @@ export class Order {
     }
 
     static create(customerId: CustomerId): Order {
-        const order = new Order(customerId);
+        const id = OrderId.generate();
+        const order = new Order(id, customerId);
         order.addDomainEvent(new OrderCreated(customerId));
         return order;
     }
